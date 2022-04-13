@@ -1,3 +1,5 @@
+<img src="kobul.jpg" alt="Italian Trulli">
+
 # About
 
 Thrase is a GPU-enabled, high-order accurate SBP-SAT finite difference code on unstructured meshes for SEAS (Sequences of Earthquakes and Aseismic Slip) problems written entirely in Julia.  
