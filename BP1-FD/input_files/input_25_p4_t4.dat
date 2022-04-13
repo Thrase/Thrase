@@ -1,0 +1,14 @@
+# 50m grid spacing, cfl timestep
+#
+#
+p=4
+Total_time=400.0
+Number_nodes=1750
+Domain_length=160
+r_hat=.78
+l=.05
+dynamic_flag=1
+threshold=.001
+dt=.25
+initial_condition_file=none
+initial_time_file=none

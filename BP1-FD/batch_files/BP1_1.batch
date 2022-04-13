@@ -1,0 +1,14 @@
+#!/bin/bash
+#SBATCH --account=erickson   ### change this to your actual account for charging
+#SBATCH --partition=longfat    ### queue to submit to
+#SBATCH --job-name=BP1_1  ### job name
+#SBATCH --output=output/BP1_1.out     ### file in which to store job stdout
+#SBATCH --error=output/BP1_1.err     ### file in which to store job stderr
+#SBATCH --time=14-00:00:00   ### wall-clock time limit, in minutes
+#SBATCH --mem=64G            ### memory limit per node, in MB
+#SBATCH --nodes=1            ### number of nodes to use
+#SBATCH --ntasks-per-node=1  ### number of tasks to launch per node
+#SBATCH --cpus-per-task=8    ### number of cores for each task
+julia -t8 ../BP1.jl ../input_files/input_50_p2_t1.dat
+
+
