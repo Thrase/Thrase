@@ -1,4 +1,4 @@
-<img src="kobul.jpg" alt="Italian Trulli">
+<img src="kobul.jpg" alt="">
 
 # About
 
