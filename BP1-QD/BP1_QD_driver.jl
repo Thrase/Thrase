@@ -272,6 +272,7 @@ function plot_slip(filename)
 
   grid = readdlm(filename, Float64)
   sz = size(grid)
+  flt_loc = grid[1,3:end]
   T = grid[2:sz[1],1]
   maxV = grid[2:end, 2]
   slip = grid[2:sz[1], 3:sz[2]]
@@ -298,9 +299,9 @@ function plot_slip(filename)
     end
 
     if i == 1
-      plot(W1, -stations, linecolor = :blue, legend = false) #interseismic phase
+      plot(W1, -flt_loc, linecolor = :blue, legend = false) #interseismic phase
     else
-      plot!(W1, -stations, linecolor = :blue, legend = false) #interseismic phase
+      plot!(W1, -flt_loc, linecolor = :blue, legend = false) #interseismic phase
     end
 
    
@@ -313,7 +314,7 @@ function plot_slip(filename)
       W1 = [W1; w1]
     end
 
-    plot!(W1, -stations, linecolor = :red, legend = false) #interseismic phase
+    plot!(W1, -flt_loc, linecolor = :red, legend = false) #interseismic phase
 
     ct = ct+1;
   end
@@ -329,7 +330,7 @@ function plot_slip(filename)
         W1 = [W1; w1]
       end
 
-      plot!(W1, -stations, linecolor = :blue, legend = false) #interseismic phase
+      plot!(W1, -flt_loc, linecolor = :blue, legend = false) #interseismic phase
 
 end
 
