@@ -1,4 +1,4 @@
-include("odefun.jl")
+include("odefun.jl")  # This defines the RHS of the ODE
 using Plots
 using SparseArrays
 using LinearAlgebra
@@ -10,7 +10,9 @@ include("ops_stripped.jl")
 
 function main()
 
-    # number of grid points in each dimension
+    # number of grid points in each dimension. 
+    # These must enable nodes at both stations and fault locations for slip (i.e. Ny and Nz cannot be "anythign")
+    # Of course, they must also resolve the critical length scale \ell_b with at least 3 grid points. 
     Ny = 160
     Nz = 160
 
@@ -32,7 +34,7 @@ function main()
     RSamin = 0.01
     RSamax = 0.025
     RSb = 0.015
-    RSDc = 0.032  # (m)
+    RSDc = 0.032  # (m)  # this should be set to 0.008 for BP1-QD, but would need Ny = Nz = 640 (approximately!)
     RSf0 = 0.6
     RSV0 = 1e-6    # (m/s)
     RSVinit = 1e-9 # (m/s)
@@ -45,6 +47,7 @@ function main()
 
 
     # SBP finite difference interior order of accuracy:
+    # Can be 2, 4 or 6
     SBPp   = 2
 
 
@@ -73,7 +76,7 @@ function main()
     bdry_vec_mod!(g, F, τ, y, z, bc_Dirichlet, bc_Neumann)
 
     # Solve the linear system to get initial displacement vector u:
-    u = M \ g
+    u = M \ g # "\" refers to a direct solve of the system Mu = g  (i.e. kind of like an inverse)
   
     # create the computational vector zf that is fault coordinates:
      zf = z   # i.e. just z-variable here
@@ -110,6 +113,7 @@ function main()
     ψδ[δNp+1:δNp + Nz + 1] .= δ
 
 
+    # Next part of code related to code output
     function find_station_index(stations, grid_points)
       numstations = length(stations)
       station_ind = zeros(numstations)
@@ -151,6 +155,7 @@ function main()
               F = F,
               y = y ,
               z = z,
+              τf = τz0*ones(Nz),
               τ = τ,
               HfI_FT = HfI_FT,
               save_stride_fields = stride_time # save every save_stride_fields time steps
@@ -175,33 +180,23 @@ function main()
 
   #ODEresults = ODE_results([], [], [], Dict(i => [] for i = 1:length(stations)))
 
-  # devol.txt is a file that stores time, max(V) and slip at all the stations:
-  open("devol.txt", "w") do io
-    write(io,"0.0 0.0 ")
-        for i in 1:length(flt_loc)
-          write(io,"$(flt_loc[i]) ")
-        end
-        write(io,"\n")
-  end
-
-  #write out initial data into devol.txt:
-  vv = Array{Float64}(undef, 1, 2+length(flt_loc))
-      vv[1] = t
-      vv[2] = log10(RSVinit)
-      vv[3:end] = δ[flt_loc_indices]
-      open("devol.txt", "a") do io
-         writedlm(io, vv)
-      end
-
 
   # cb_mod gets called after every successful time step computed in ODE solver
   # (i.e. slip is written out to the text file devol.txt):
-  cb_mod = SavingCallback((ψδ, t, i) -> write_text_slip(ψδ, t, i, zf, flt_loc, flt_loc_indices, odeparam, "BP1_", 10 * year_seconds), SavedValues(Float64, Float64))
+  #cb_slip = SavingCallback((ψδ, t, i) -> write_slip(ψδ, t, i, zf, flt_loc, flt_loc_indices, odeparam, "BP1_", 10 * year_seconds), SavedValues(Float64, Float64))
+  #cb_stations = SavingCallback((ψδ, t, i) -> write_stations(ψδ, t, i, zf, stations, station_indices, odeparam, "BP1_", 10 * year_seconds), SavedValues(Float64, Float64))
+  cb_fun = SavingCallback((ψδ, t, i) -> write_to_file(ψδ, t, i, zf, flt_loc, flt_loc_indices,stations, station_indices, odeparam, "BP1_", 10 * year_seconds), SavedValues(Float64, Float64))
+
+
+  # Make text files to store on-fault time series and slip data,
+  # Also initialize with initial data:
+  create_text_files(flt_loc, flt_loc_indices, stations, station_indices, 0, RSVinit, δ, τz0, θ)
+
 
   # Solve the ODE problem "prob" with Tsit5 (a Runge-Kutta method):
   sol = solve(prob, Tsit5(); dt=0.01,
-              atol = 1e-14, rtol = 1e-14, save_everystep=true, gamma = 0.2,
-              internalnorm=(x, _)->norm(x, Inf), callback=cb_mod)
+              abstol = 1e-6, reltol = 1e-6, save_everystep=true, gamma = 0.2,
+              internalnorm=(x, _)->norm(x, Inf), callback=cb_fun)
 
  
   return (sol, zf, δNp)
@@ -335,6 +330,36 @@ function plot_slip(filename)
 end
 
 
+
+# plot_fault_time_series will plot field "field" from "filename".
+# "field" has to be one of "slip", "V", "shear_stress", "state"
+function plot_fault_time_series(field, filename)
+
+  
+  grid = readdlm(filename, Float64)
+  sz = size(grid)
+  
+  T = grid[1:end, 1]  # Get time.
+
+  if field == "slip"
+    y = grid[1:sz[1],2]
+    plot(T, y)
+  elseif field == "V"
+    y = grid[1:sz[1],3]
+    plot(T, y)
+  elseif field == "shear_stress"
+    y = grid[1:sz[1],4]
+    plot(T, y)
+  else
+    y = grid[1:sz[1],5]
+    plot(T, y)
+  end
+  gui()
+    #return nothing
+end
+
+  
+
 # call main function: 
 (S, zf, δNp) = main()
 
@@ -343,3 +368,6 @@ end
 
 # plot slip (uncomment if desired):
 # plot_slip("devol.txt")
+
+# plot times series of shear stress:
+# plot_fault_time_series("shear_stress", "fltst_dp000.txt")

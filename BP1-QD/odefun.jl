@@ -28,6 +28,7 @@ function odefun(dψV, ψδ, p, t)
   δNp = p.δNp
   N = p.N
   F = p.F
+  τf = p.τf
   τ = p.τ
   y = p.y 
   z = p.z
@@ -69,6 +70,7 @@ function odefun(dψV, ψδ, p, t)
     an = RSa[n]
 
     τn = Δτ[n] + τz0
+    τf[n] = τn # store for writing out to file.
   
 
     VR = abs(τn / η)
@@ -93,88 +95,9 @@ function odefun(dψV, ψδ, p, t)
 end
 
 
-function setupfaultstations(locations)
-  T = eltype(locations)
-  @assert size(locations,2) == 2
-end
 
 
-struct ODE_results
-  t_list::Array{Any,1}
-  V_list::Array{Any,1}
-  δ_list::Array{Any,1}
- #  station_1::Array{Any,1}
- #  station_2::Array{Any,1}
- #  station_3::Array{Any,1}
- #  station_4::Array{Any,1}
- #  station_5::Array{Any,1}
- #  station_6::Array{Any,1}
- #  station_7::Array{Any,1}
- #  station_8::Array{Any,1}
- #  station_9::Array{Any,1}
- #  station_10::Array{Any,1}
- #  station_11::Array{Any,1}
- stations::Dict{Int64,Array{Any,1}}
-end
-
-function stopping_criteria(ψδ,t,i)
- Vmax = 0.0
- if isdefined(i,:fsallast)
-   δNp = div(length(ψδ),2)
-   dψV = i.fsallast
-   dψ = @view dψV[1:δNp]
-   V = @view dψV[δNp .+ (1:δNp)]
-   Vmax = maximum(abs.(extrema(V)))
-   δ = @view ψδ[δNp .+ (1:δNp)]
-   ψ = @view ψδ[1:δNp]
-   return Vmax >= 1e-3
- end
-end
-
-affect!(integrator)= terminate!(integrator)
-
-function savestop(ψδ,t,i,ODEresults,p)
-  Vmax = 0.0
-
-  if isdefined(i,:fsallast)
-  
-    δNp = p.δNp
-    N = p.N
-    dψV = i.fsallast
-    dψ = @view dψV[1:δNp]
-    push!(ODEresults.t_list,t)
-
-    
-    V = @view dψV[δNp .+ (1:N+1)]
-    Vmax = maximum(abs.(extrema(V)))
-    δ = @view ψδ[δNp .+ (1:δNp)]
-    ψ = @view ψδ[1:δNp]
-    # p.u_old .= p.u
-    if Vmax >= 1e-3
-    
-      push!(p.counter,1)
-      if length(p.counter) >= 2
-        terminate!(i)
-        open("data_for_toby.txt","w") do io
-          write(io,"$(ODEresults.t_list[end]) $(ODEresults.t_list[end-1])\n")
-          write(io,"*"^40,"\n")
-          writedlm(io,ψ,' ')
-          write(io,"*"^40,"\n")
-          writedlm(io,[p.u p.u_old],' ')
-        end
-      end
-      p.u_old .= p.u
-    end
- 
- 
-  end
-
-  Vmax
- end
-
-
-
-function write_text_slip(ψδ,t,i,yf,stations,station_indices,p,base_name="",tdump=100)
+function write_to_file(ψδ, t, i, zf,flt_loc, flt_loc_indices, stations, station_indices, p, base_name="", tdump=100)
   Vmax = 0.0
 
   if isdefined(i,:fsallast) 
@@ -186,22 +109,88 @@ function write_text_slip(ψδ,t,i,yf,stations,station_indices,p,base_name="",tdu
     Vmax = maximum(abs.(extrema(V)))
     δ = @view ψδ[δNp .+ (1:δNp)]
     ψ = @view ψδ[1:δNp]
+    τf = p.τf
+ 
+    θ = (p.RSDc * exp.((ψ .- p.RSf0) ./ p.RSb)) / p.RSV0  # Invert ψ for θ.
     
     if mod(ctr[], p.save_stride_fields) == 0 || t == (sim_years ./ 31556926)
-      vv = Array{Float64}(undef, 1, 2+length(stations))
+      vv = Array{Float64}(undef, 1, 2+length(flt_loc))
       vv[1] = t
       vv[2] = log10(Vmax)
-      vv[3:end] = δ[station_indices]
-    
+      vv[3:end] = δ[flt_loc_indices]
       open("devol.txt", "a") do io
-        
         writedlm(io, vv)
       end
-      
+
+      stations = ["000", "025", "050", "075", "100", "125", "150", "175", "200", "250", "300", "350"]
+     
+      for i = 1:length(station_indices)
+        ww = Array{Float64}(undef, 1, 5)
+        ww[1] = t
+        ww[2] = δ[station_indices[i]]
+        ww[3] = log10(V[station_indices[i]])
+        ww[4] =  τf[station_indices[i]]
+        ww[5] = log10(θ[station_indices[i]])
+        open("fltst_dp"*stations[i]*".txt", "a") do io
+            writedlm(io, ww)
+        end
+      end
     end
+  
+      
+  
     global ctr[] += 1
     @show ctr[]
+  
+
+  end
+     Vmax
+
+  
+  
+end
+
+ 
+
+      
+function create_text_files(flt_loc, flt_loc_indices, stations, station_indices, t, RSVinit, δ, τz0, θ)
+
+  # devol.txt is a file that stores time, max(V) and slip at all the stations:
+  open("devol.txt", "w") do io
+    write(io,"0.0 0.0 ")
+      for i in 1:length(flt_loc)
+        write(io,"$(flt_loc[i]) ")
+      end
+        write(io,"\n")
+    end
+  
+  #write out initial data into devol.txt:
+  vv = Array{Float64}(undef, 1, 2+length(flt_loc))
+    vv[1] = t
+    vv[2] = log10(RSVinit)
+    vv[3:end] = δ[flt_loc_indices]
+    open("devol.txt", "a") do io
+        writedlm(io, vv)
+    end
+
+  # write out initial data into station files:
+
+  # fltst_dpXXX.txt is a file that stores time and time-series of slip, log10(slip_rate), 
+  # shear_stress and log10(state) at depth of z = XXX km, where XXX is each of the fault station depths.
+  # First we write out initial data into each fltst_dpXXX.txt:
+
+  stations = ["000", "025", "050", "075", "100", "125", "150", "175", "200", "250", "300", "350"]
+  for n = 1:length(stations)
+    XXX = "fltst_dp"*stations[n]*".txt"
+    ww = Array{Float64}(undef, 1, 5)
+    ww[1] = t
+    ww[2] = δ[station_indices[n]]
+    ww[3] = log10(RSVinit)
+    ww[4] =  τz0
+    ww[5] = log10(θ[station_indices[n]])
+    open(XXX, "w") do io
+        writedlm(io, ww)
+    end
   end
 
-     Vmax
- end
+end
